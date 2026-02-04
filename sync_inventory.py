@@ -24,10 +24,30 @@ def fetch_erp_rows():
         ERP_URL,
         headers={"Accept": "application/json"},
         auth=(username, password),
-        timeout=60
+        timeout=60,
+        allow_redirects=False,  # clave para ver si te redirige a login
     )
-    r.raise_for_status()
-    return r.json().get("rows", [])
+
+    print("ERP status:", r.status_code)
+    print("ERP content-type:", r.headers.get("content-type"))
+
+    # Si hay redirect, casi seguro te manda a login
+    if 300 <= r.status_code < 400:
+        print("ERP redirect location:", r.headers.get("location"))
+        raise RuntimeError("ERP respondió con redirect (probable login). Revisa autenticación/endpoint.")
+
+    # Si no es 200, imprime body corto
+    if r.status_code != 200:
+        print("ERP response (first 500 chars):", (r.text or "")[:500])
+        r.raise_for_status()
+
+    ctype = (r.headers.get("content-type") or "").lower()
+    if "application/json" not in ctype:
+        print("ERP response (first 500 chars):", (r.text or "")[:500])
+        raise RuntimeError("ERP no devolvió JSON. Probable HTML/login o error del endpoint.")
+
+    data = r.json()
+    return data.get("rows", [])
 
 def map_row(row):
     return {
