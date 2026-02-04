@@ -56,88 +56,79 @@ def now_utc_iso() -> str:
 # =========================
 # ERP Auth
 # =========================
+from urllib.parse import urlparse
+
 def erp_login(session: requests.Session) -> dict:
     login_url = require_env("ERP_LOGIN_URL")
     username = require_env("ERP_USERNAME")
     password = require_env("ERP_PASSWORD")
-
-    if not is_http_url(login_url):
-        raise RuntimeError(f"ERP_LOGIN_URL inválida: {login_url!r}")
+    inv_url = require_env("ERP_URL")
 
     print("🔐 Entrando a erp_login()")
 
-    # 1) Primero hacemos GET para tomar cookies (muchos ERPs lo necesitan)
-    try:
-        g = session.get(
-            login_url,
-            headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"},
-            timeout=30,
-            allow_redirects=True
-        )
-        print("LOGIN GET status:", g.status_code)
-        print("LOGIN GET content-type:", g.headers.get("content-type"))
-    except Exception as e:
-        print("❌ Excepción en GET login:", repr(e))
-        raise
+    # Diagnóstico de dominios
+    login_host = urlparse(login_url).netloc
+    inv_host = urlparse(inv_url).netloc
+    print("LOGIN host:", login_host)
+    print("INVENTARIO host:", inv_host)
+    if login_host != inv_host:
+        print("⚠️ OJO: login y inventario están en dominios distintos. La cookie puede no aplicar.")
 
-    # 2) Probamos POST tipo FORM (lo más común en ERPs “web”)
-    form_payloads = [
-        {"username": username, "password": password},
-        {"user": username, "pass": password},
-        {"Usuario": username, "Clave": password},
-        {"usuario": username, "contrasena": password},
-        {"email": username, "password": password},
-    ]
+    # 1) GET previo para cookies/CSRF (aunque no lo usemos aún)
+    g = session.get(
+        login_url,
+        headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"},
+        timeout=30,
+        allow_redirects=True
+    )
+    print("LOGIN GET status:", g.status_code)
+    print("LOGIN GET final url:", g.url)
+    print("Cookies after GET:", session.cookies.get_dict())
 
-    last_resp = None
+    # 2) POST FORM (lo más compatible)
+    payload = {"username": username, "password": password}
 
-    for payload in form_payloads:
-        print("➡️ Probando POST login FORM con keys:", list(payload.keys()))
-        r = session.post(
-            login_url,
-            data=payload,  # 👈 FORM (no JSON)
-            headers={
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "*/*",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            timeout=30,
-            allow_redirects=True  # 👈 importante para que complete la sesión
-        )
-        last_resp = r
+    r = session.post(
+        login_url,
+        data=payload,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "*/*",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Referer": g.url
+        },
+        timeout=30,
+        allow_redirects=True
+    )
 
-        print("LOGIN POST status:", r.status_code)
-        print("LOGIN POST content-type:", r.headers.get("content-type"))
+    print("LOGIN POST status:", r.status_code)
+    print("LOGIN POST final url:", r.url)
+    print("LOGIN POST history:", [h.status_code for h in r.history])
+    print("Cookies after POST:", session.cookies.get_dict())
 
-        # Si el servidor setea cookie de sesión, ya estamos
-        if r.history:
-            # hubo redirects
-            pass
+    # Si quedaron cookies, asumimos sesión
+    if session.cookies and len(session.cookies) > 0:
+        print("✅ Cookie de sesión detectada")
+        return {"mode": "cookie", "token": None}
 
-        if session.cookies and len(session.cookies) > 0:
-            print("✅ Cookie de sesión detectada:", session.cookies.get_dict())
-            return {"mode": "cookie", "token": None}
+    # Si no hay cookies, intentamos token (si respondió JSON)
+    ctype = (r.headers.get("content-type") or "").lower()
+    if "application/json" in ctype:
+        try:
+            data = r.json()
+        except Exception:
+            data = {}
+        token = data.get("access_token") or data.get("token") or data.get("jwt")
+        if token:
+            print("✅ Token detectado")
+            return {"mode": "token", "token": token}
 
-        # Si devuelve JSON con token, también sirve
-        ctype = (r.headers.get("content-type") or "").lower()
-        if "application/json" in ctype:
-            try:
-                data = r.json()
-            except Exception:
-                data = {}
-            token = data.get("access_token") or data.get("token") or data.get("jwt")
-            if token:
-                print("✅ Login por token")
-                return {"mode": "token", "token": token}
+    print("❌ Login no dejó cookie ni token.")
+    print("LOGIN response content-type:", r.headers.get("content-type"))
+    print("LOGIN body (first 300):", (r.text or "")[:300])
 
-    # Diagnóstico final
-    print("❌ LOGIN FALLÓ - diagnóstico")
-    if last_resp is not None:
-        print("status:", last_resp.status_code)
-        print("content-type:", last_resp.headers.get("content-type"))
-        print("body (first 400):", (last_resp.text or "")[:400])
+    raise RuntimeError("Login sin sesión: probablemente requiere campos distintos o CSRF.")
 
-    raise RuntimeError("No se pudo autenticar (probable CSRF o endpoint incorrecto)")
 
 def fetch_erp_rows() -> list[dict]:
     erp_url = require_env("ERP_URL")
