@@ -41,7 +41,7 @@ def main():
     print("Cookies after login:", session.cookies.get_dict())
 
     # -------- LLAMADA A LA VISTA --------
-    response = session.get(
+response = session.get(
     erp_url,
     headers={
         "Accept": "application/json",
@@ -53,9 +53,6 @@ def main():
 
 print("Final URL after redirects:", response.url)
 print("Redirect history:", [h.status_code for h in response.history])
-
-if response.history:
-    print("First redirect location:", response.history[0].headers.get("location"))
 
     if response.status_code != 200:
         print("ERP response (first 300 chars):")
