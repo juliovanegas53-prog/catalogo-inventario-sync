@@ -42,17 +42,20 @@ def main():
 
     # -------- LLAMADA A LA VISTA --------
     response = session.get(
-        erp_url,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0"
-        },
-        timeout=30,
-        allow_redirects=False
-    )
+    erp_url,
+    headers={
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0"
+    },
+    timeout=30,
+    allow_redirects=True
+)
 
-    print("ERP status:", response.status_code)
-    print("ERP content-type:", response.headers.get("content-type"))
+print("Final URL after redirects:", response.url)
+print("Redirect history:", [h.status_code for h in response.history])
+
+if response.history:
+    print("First redirect location:", response.history[0].headers.get("location"))
 
     if response.status_code != 200:
         print("ERP response (first 300 chars):")
