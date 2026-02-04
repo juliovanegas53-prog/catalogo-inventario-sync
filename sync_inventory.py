@@ -1,28 +1,30 @@
 import os
 import requests
 
-print("🟢 Script iniciado")
-
+# ======================
+# Configuración
+# ======================
 ERP_BASE_URL = os.environ["ERP_BASE_URL"].rstrip("/")
 ERP_VIEW_NAME = os.environ["ERP_VIEW_NAME"]
-
 ERP_USERNAME = os.environ["ERP_USERNAME"]
 ERP_PASSWORD = os.environ["ERP_PASSWORD"]
 
+print("Script loaded")
+
 def main():
-    print("🧪 main() arrancó")
+    print("Main started")
 
-    # Construimos la URL final de la vista
-    erp_url = f"{ERP_BASE_URL}/api/{ERP_VIEW_NAME}"
-    print("➡️ ERP_URL final:", erp_url)
+    erp_url = ERP_BASE_URL + "/api/" + ERP_VIEW_NAME
+    print("ERP URL:", erp_url)
 
-    # Sesión para mantener cookies
     session = requests.Session()
 
-    # --- LOGIN (simple, solo para probar sesión) ---
-    print("🔐 Intentando login (form)")
-    login_resp = session.post(
-        ERP_BASE_URL + "/login",
+    # -------- LOGIN (FORM) --------
+    login_url = ERP_BASE_URL + "/login"
+    print("Login URL:", login_url)
+
+    login_response = session.post(
+        login_url,
         data={
             "username": ERP_USERNAME,
             "password": ERP_PASSWORD
@@ -35,12 +37,11 @@ def main():
         allow_redirects=True
     )
 
-    print("LOGIN status:", login_resp.status_code)
-    print("Cookies tras login:", session.cookies.get_dict())
+    print("Login status:", login_response.status_code)
+    print("Cookies after login:", session.cookies.get_dict())
 
-    # --- LLAMADA A LA VISTA ---
-    print("📦 Llamando vista de inventario...")
-    r = session.get(
+    # -------- LLAMADA A LA VISTA --------
+    response = session.get(
         erp_url,
         headers={
             "Accept": "application/json",
@@ -50,5 +51,17 @@ def main():
         allow_redirects=False
     )
 
-    print("ERP status:", r.status_code)
-    print("ERP content-type:", r.headers.get("cont
+    print("ERP status:", response.status_code)
+    print("ERP content-type:", response.headers.get("content-type"))
+
+    if response.status_code != 200:
+        print("ERP response (first 300 chars):")
+        print(response.text[:300])
+        raise RuntimeError("ERP did not return 200")
+
+    print("ERP response OK")
+    print("First 300 chars of response:")
+    print(response.text[:300])
+
+if __name__ == "__main__":
+    main()
