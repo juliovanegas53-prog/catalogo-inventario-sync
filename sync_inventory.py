@@ -57,24 +57,31 @@ def now_utc_iso() -> str:
 # ERP Auth
 # =========================
 def erp_login(session: requests.Session) -> dict:
-    """
-    Intenta autenticar en el ERP.
-    Soporta:
-      - Login que devuelve JSON con token (access_token/token/jwt)
-      - Login que setea cookie de sesión (Set-Cookie)
-    """
     login_url = require_env("ERP_LOGIN_URL")
     username = require_env("ERP_USERNAME")
     password = require_env("ERP_PASSWORD")
 
     if not is_http_url(login_url):
-        raise RuntimeError(f"ERP_LOGIN_URL inválida: {login_url!r} (debe iniciar con http/https)")
+        raise RuntimeError(f"ERP_LOGIN_URL inválida: {login_url!r}")
 
     print("🔐 Entrando a erp_login()")
-    print("➡️ Enviando POST a ERP_LOGIN_URL")
 
-    # Probamos varios payloads típicos
-    payloads = [
+    # 1) Primero hacemos GET para tomar cookies (muchos ERPs lo necesitan)
+    try:
+        g = session.get(
+            login_url,
+            headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"},
+            timeout=30,
+            allow_redirects=True
+        )
+        print("LOGIN GET status:", g.status_code)
+        print("LOGIN GET content-type:", g.headers.get("content-type"))
+    except Exception as e:
+        print("❌ Excepción en GET login:", repr(e))
+        raise
+
+    # 2) Probamos POST tipo FORM (lo más común en ERPs “web”)
+    form_payloads = [
         {"username": username, "password": password},
         {"user": username, "pass": password},
         {"Usuario": username, "Clave": password},
@@ -84,58 +91,53 @@ def erp_login(session: requests.Session) -> dict:
 
     last_resp = None
 
-    for payload in payloads:
-        try:
-            r = session.post(
-                login_url,
-                json=payload,
-                headers={
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0",
-                },
-                timeout=30,
-                allow_redirects=False,
-            )
-            last_resp = r
-        except Exception as e:
-            print("❌ Excepción en login:", repr(e))
-            continue
+    for payload in form_payloads:
+        print("➡️ Probando POST login FORM con keys:", list(payload.keys()))
+        r = session.post(
+            login_url,
+            data=payload,  # 👈 FORM (no JSON)
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "*/*",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            timeout=30,
+            allow_redirects=True  # 👈 importante para que complete la sesión
+        )
+        last_resp = r
 
-        print("LOGIN status:", r.status_code)
-        print("LOGIN content-type:", r.headers.get("content-type"))
+        print("LOGIN POST status:", r.status_code)
+        print("LOGIN POST content-type:", r.headers.get("content-type"))
 
-        # Si setea cookie, ya nos sirve para el siguiente GET
-        if r.headers.get("set-cookie"):
-            print("✅ Login por cookie (Set-Cookie detectado)")
+        # Si el servidor setea cookie de sesión, ya estamos
+        if r.history:
+            # hubo redirects
+            pass
+
+        if session.cookies and len(session.cookies) > 0:
+            print("✅ Cookie de sesión detectada:", session.cookies.get_dict())
             return {"mode": "cookie", "token": None}
 
-        # Si devuelve JSON, buscamos token
+        # Si devuelve JSON con token, también sirve
         ctype = (r.headers.get("content-type") or "").lower()
-        if r.status_code == 200 and "application/json" in ctype:
+        if "application/json" in ctype:
             try:
                 data = r.json()
             except Exception:
                 data = {}
-
             token = data.get("access_token") or data.get("token") or data.get("jwt")
             if token:
                 print("✅ Login por token")
                 return {"mode": "token", "token": token}
 
-        # Si redirige, es un login web (cookie/sesión), pero sin cookie no nos sirve aún
-        if 300 <= r.status_code < 400:
-            print("ℹ️ Login respondió con redirect, location:", r.headers.get("location"))
-
-    # Si llegamos aquí, no autenticó
+    # Diagnóstico final
+    print("❌ LOGIN FALLÓ - diagnóstico")
     if last_resp is not None:
-        print("❌ LOGIN FALLÓ - diagnóstico")
         print("status:", last_resp.status_code)
         print("content-type:", last_resp.headers.get("content-type"))
         print("body (first 400):", (last_resp.text or "")[:400])
 
-    raise RuntimeError("No se pudo autenticar en el ERP con los payloads probados (puede requerir CSRF).")
-
+    raise RuntimeError("No se pudo autenticar (probable CSRF o endpoint incorrecto)")
 
 def fetch_erp_rows() -> list[dict]:
     erp_url = require_env("ERP_URL")
