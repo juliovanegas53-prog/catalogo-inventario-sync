@@ -4,7 +4,7 @@ import os
 import requests
 from datetime import datetime, timezone
 
-def def erp_login(session: requests.Session):
+def erp_login(session: requests.Session):
     print("🔐 Entrando a erp_login()")
 
     username = os.environ["ERP_USERNAME"]
