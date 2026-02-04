@@ -1,32 +1,9 @@
-print("🚀 Script iniciado")
-import os
-import requests
-from datetime import datetime, timezone
-
-ERP_URL = os.environ["ERP_URL"]
-ERP_LOGIN_URL = os.environ["ERP_LOGIN_URL"]
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-TABLE = "inventario"
-
-def supabase_headers():
-    return {
-        "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates",
-    }
-
 def erp_login(session: requests.Session):
-    """
-    Soporta dos estilos:
-    1) Login que devuelve JSON con token (access_token / token / jwt)
-    2) Login que devuelve cookie de sesión (Set-Cookie) y ya queda autenticado en el session
-    """
+    print("🔐 Iniciando login ERP")
+
     username = os.environ["ERP_USERNAME"]
     password = os.environ["ERP_PASSWORD"]
 
-    # Intento 1: JSON login típico
     payloads = [
         {"username": username, "password": password},
         {"user": username, "pass": password},
@@ -36,83 +13,84 @@ def erp_login(session: requests.Session):
     ]
 
     last_resp = None
-    for payload in payloads:
-        try:
-            r = session.post(
-                ERP_LOGIN_URL,
-                json=payload,
-                headers={"Accept": "application/json"},
-                timeout=60,
-                allow_redirects=False
-            )
-            last_resp = r
-        except Exception:
-            continue
 
-        # Si redirige a /saya/ o similar, probablemente es login tipo web -> cookie
+    for payload in payloads:
+        r = session.post(
+            ERP_LOGIN_URL,
+            json=payload,
+            headers={"Accept": "application/json"},
+            timeout=30,
+            allow_redirects=False
+        )
+
+        last_resp = r
+
         if 300 <= r.status_code < 400:
-            # seguimos con sesión/cookies si las hay
+            print("ℹ️ Login por cookie (redirect detectado)")
             return {"mode": "cookie", "token": None}
 
-        # Si devuelve JSON con token
-        ctype = (r.headers.get("content-type") or "").lower()
-        if r.status_code == 200 and "application/json" in ctype:
+        content_type = (r.headers.get("content-type") or "").lower()
+
+        if r.status_code == 200 and "application/json" in content_type:
             data = r.json()
             token = data.get("access_token") or data.get("token") or data.get("jwt")
+
             if token:
+                print("✅ Login por token")
                 return {"mode": "token", "token": token}
 
-            # Si no hay token, pero el login fue OK y setea cookie
             if r.headers.get("set-cookie"):
+                print("✅ Login por cookie (JSON)")
                 return {"mode": "cookie", "token": None}
 
-        # Si devuelve 204 a veces significa “OK sin body”
         if r.status_code == 204 and r.headers.get("set-cookie"):
+            print("✅ Login por cookie (204)")
             return {"mode": "cookie", "token": None}
 
-    # Si nada funcionó, imprime diagnóstico útil
     if last_resp is not None:
-        print("LOGIN status:", last_resp.status_code)
-        print("LOGIN content-type:", last_resp.headers.get("content-type"))
-        print("LOGIN body (first 400):", (last_resp.text or "")[:400])
+        print("❌ LOGIN FALLÓ")
+        print("status:", last_resp.status_code)
+        print("content-type:", last_resp.headers.get("content-type"))
+        print("body:", (last_resp.text or "")[:300])
 
-    raise RuntimeError("No se pudo autenticar en el ERP. El login endpoint/payload no coincide o requiere CSRF.")
+    raise RuntimeError("No se pudo autenticar en el ERP")
+
 
 def fetch_erp_rows():
+    print("🚀 Script iniciado")
+
     session = requests.Session()
-
     auth = erp_login(session)
-    headers = {"Accept": "application/json"}
 
-    if auth["mode"] == "token" and auth["token"]:
+    headers = {"Accept": "application/json"}
+    if auth["mode"] == "token":
         headers["Authorization"] = f"Bearer {auth['token']}"
 
- print("➡️ Llamando ERP inventario...")
-r = session.get(
-    ERP_URL,
-    headers=headers,
-    timeout=15,          # 👈 bajamos el timeout
-    allow_redirects=False
-)
+    print("➡️ Llamando ERP inventario...")
+
+    r = session.get(
+        ERP_URL,
+        headers=headers,
+        timeout=30,
+        allow_redirects=False
+    )
 
     print("ERP status:", r.status_code)
     print("ERP content-type:", r.headers.get("content-type"))
 
     if 300 <= r.status_code < 400:
-        print("ERP redirect location:", r.headers.get("location"))
-        raise RuntimeError("Aún redirige a login: faltan cookies/token o el endpoint no es el de API.")
+        print("redirect:", r.headers.get("location"))
+        raise RuntimeError("Sigue redirigiendo a login")
 
     if r.status_code != 200:
-        print("ERP body (first 500):", (r.text or "")[:500])
+        print("body:", (r.text or "")[:300])
         r.raise_for_status()
 
-    ctype = (r.headers.get("content-type") or "").lower()
-    if "application/json" not in ctype:
-        print("ERP body (first 500):", (r.text or "")[:500])
-        raise RuntimeError("El endpoint de inventario no está devolviendo JSON.")
+    content_type = (r.headers.get("content-type") or "").lower()
+    if "application/json" not in content_type:
+        print("body:", (r.text or "")[:300])
+        raise RuntimeError("Inventario no devolvió JSON")
 
+    print("✅ Inventario recibido")
     data = r.json()
-
-    print("✅ Inventario recibido, procesando JSON")
-
     return data.get("rows", [])
