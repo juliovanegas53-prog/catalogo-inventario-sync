@@ -20,6 +20,7 @@ jobs:
       - run: python sync_inventory.py
         env:
           ERP_URL: ${{ secrets.ERP_URL }}
+          ERP_LOGIN_URL: ${{ secrets.ERP_LOGIN_URL }}
           ERP_USERNAME: ${{ secrets.ERP_USERNAME }}
           ERP_PASSWORD: ${{ secrets.ERP_PASSWORD }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
