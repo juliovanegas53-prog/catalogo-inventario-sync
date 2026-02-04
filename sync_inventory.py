@@ -3,16 +3,10 @@ import requests
 from datetime import datetime, timezone
 
 ERP_URL = os.environ["ERP_URL"]
-ERP_TOKEN = os.environ.get("ERP_TOKEN")
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 TABLE = "inventario"
 
-def erp_headers():
-    h = {"Accept": "application/json"}
-    if ERP_TOKEN:
-        h["Authorization"] = f"Bearer {ERP_TOKEN}"
-    return h
 
 def supabase_headers():
     return {
@@ -29,7 +23,7 @@ def fetch_erp_rows():
     r = requests.get(
         ERP_URL,
         headers={"Accept": "application/json"},
-        auth=(username, password),   # <- Basic Auth
+        auth=(username, password),
         timeout=60
     )
     r.raise_for_status()
