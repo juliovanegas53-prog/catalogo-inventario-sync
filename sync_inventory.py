@@ -1,3 +1,4 @@
+print("🚀 Script iniciado")
 import os
 import requests
 from datetime import datetime, timezone
@@ -86,12 +87,13 @@ def fetch_erp_rows():
     if auth["mode"] == "token" and auth["token"]:
         headers["Authorization"] = f"Bearer {auth['token']}"
 
-    r = session.get(
-        ERP_URL,
-        headers=headers,
-        timeout=60,
-        allow_redirects=False
-    )
+ print("➡️ Llamando ERP inventario...")
+r = session.get(
+    ERP_URL,
+    headers=headers,
+    timeout=15,          # 👈 bajamos el timeout
+    allow_redirects=False
+)
 
     print("ERP status:", r.status_code)
     print("ERP content-type:", r.headers.get("content-type"))
@@ -110,4 +112,7 @@ def fetch_erp_rows():
         raise RuntimeError("El endpoint de inventario no está devolviendo JSON.")
 
     data = r.json()
+
+    print("✅ Inventario recibido, procesando JSON")
+
     return data.get("rows", [])
