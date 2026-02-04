@@ -23,7 +23,15 @@ def supabase_headers():
     }
 
 def fetch_erp_rows():
-    r = requests.get(ERP_URL, headers=erp_headers(), timeout=60)
+    username = os.environ["ERP_USERNAME"]
+    password = os.environ["ERP_PASSWORD"]
+
+    r = requests.get(
+        ERP_URL,
+        headers={"Accept": "application/json"},
+        auth=(username, password),   # <- Basic Auth
+        timeout=60
+    )
     r.raise_for_status()
     return r.json().get("rows", [])
 
