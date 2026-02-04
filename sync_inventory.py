@@ -1,68 +1,61 @@
+print("🟢 Archivo cargado")
+
 import os
 import requests
 from datetime import datetime, timezone
 
-def erp_login(session: requests.Session):
-    print("🔐 Iniciando login ERP")
+def def erp_login(session: requests.Session):
+    print("🔐 Entrando a erp_login()")
 
     username = os.environ["ERP_USERNAME"]
     password = os.environ["ERP_PASSWORD"]
 
-    payloads = [
-        {"username": username, "password": password},
-        {"user": username, "pass": password},
-        {"Usuario": username, "Clave": password},
-        {"usuario": username, "contrasena": password},
-        {"email": username, "password": password},
-    ]
+    payload = {
+        "username": username,
+        "password": password
+    }
 
-    last_resp = None
+    print("➡️ Enviando POST a ERP_LOGIN_URL")
 
-    for payload in payloads:
+    try:
         r = session.post(
             ERP_LOGIN_URL,
             json=payload,
-            headers={"Accept": "application/json"},
-            timeout=30,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=10,              # 👈 clave
             allow_redirects=False
         )
+    except Exception as e:
+        print("❌ Excepción en login:", repr(e))
+        raise
 
-        last_resp = r
+    print("LOGIN status:", r.status_code)
+    print("LOGIN content-type:", r.headers.get("content-type"))
+    print("LOGIN headers:", dict(r.headers))
+    print("LOGIN body (first 300):", (r.text or "")[:300])
 
-        if 300 <= r.status_code < 400:
-            print("ℹ️ Login por cookie (redirect detectado)")
-            return {"mode": "cookie", "token": None}
+    # Token JSON
+    if r.status_code == 200 and "application/json" in (r.headers.get("content-type") or "").lower():
+        data = r.json()
+        token = data.get("access_token") or data.get("token") or data.get("jwt")
+        if token:
+            print("✅ Login por token")
+            return {"mode": "token", "token": token}
 
-        content_type = (r.headers.get("content-type") or "").lower()
+    # Cookie de sesión
+    if r.headers.get("set-cookie"):
+        print("✅ Login por cookie")
+        return {"mode": "cookie", "token": None}
 
-        if r.status_code == 200 and "application/json" in content_type:
-            data = r.json()
-            token = data.get("access_token") or data.get("token") or data.get("jwt")
-
-            if token:
-                print("✅ Login por token")
-                return {"mode": "token", "token": token}
-
-            if r.headers.get("set-cookie"):
-                print("✅ Login por cookie (JSON)")
-                return {"mode": "cookie", "token": None}
-
-        if r.status_code == 204 and r.headers.get("set-cookie"):
-            print("✅ Login por cookie (204)")
-            return {"mode": "cookie", "token": None}
-
-    if last_resp is not None:
-        print("❌ LOGIN FALLÓ")
-        print("status:", last_resp.status_code)
-        print("content-type:", last_resp.headers.get("content-type"))
-        print("body:", (last_resp.text or "")[:300])
-
-    raise RuntimeError("No se pudo autenticar en el ERP")
+    raise RuntimeError("Login no exitoso")
 
 
 def fetch_erp_rows():
-    print("🚀 Script iniciado")
-
+    print("🚀 fetch_erp_rows() iniciado")
     session = requests.Session()
     auth = erp_login(session)
 
