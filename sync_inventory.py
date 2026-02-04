@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 # =========================
 # Config
 # =========================
-ERP_URL = os.environ.get("ERP_URL", "").strip()
+ERP_BASE_URL = os.environ.get("ERP_BASE_URL", "").strip().rstrip("/")
+ERP_VIEW_NAME = os.environ.get("ERP_VIEW_NAME", "").strip()
 ERP_LOGIN_URL = os.environ.get("ERP_LOGIN_URL", "").strip()
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
@@ -131,7 +132,8 @@ def erp_login(session: requests.Session) -> dict:
 
 
 def fetch_erp_rows() -> list[dict]:
-    erp_url = require_env("ERP_URL")
+    erp_url = build_erp_url()
+print("ERP_URL final:", erp_url)
 
     if not is_http_url(erp_url):
         raise RuntimeError(f"ERP_URL inválida: {erp_url!r} (debe iniciar con http/https)")
