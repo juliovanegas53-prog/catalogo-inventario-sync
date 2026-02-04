@@ -1,3 +1,7 @@
+import os
+import requests
+from datetime import datetime, timezone
+
 def erp_login(session: requests.Session):
     print("🔐 Iniciando login ERP")
 
