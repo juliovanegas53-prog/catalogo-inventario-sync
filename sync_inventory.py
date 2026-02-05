@@ -170,7 +170,7 @@ def fetch_productos_precios_rows():
     cnx = mysql_connect()
     cur = cnx.cursor(dictionary=True)
 
-    q = """
+ q = """
 SELECT
   codigoAlternoProducto,
   nombreLargoProducto,
