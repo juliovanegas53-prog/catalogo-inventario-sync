@@ -62,6 +62,7 @@ def fetch_view_rows():
     hoy = datetime.datetime.now()
     mes_actual = f"{meses[hoy.month]} {hoy.year}"
 
+    bodegas = (os.environ.get("BODEGAS_PERMITIDAS", "") or "").strip()
     limit = int(os.environ.get("DB_QUERY_LIMIT", "0") or "0")
 
     cnx = mysql_connect()
@@ -75,11 +76,19 @@ def fetch_view_rows():
     """
     params = [mes_actual]
 
+    # 👉 AQUÍ se anexa el filtro de bodegas
+    if bodegas:
+        b_list = [b.strip() for b in bodegas.split(",") if b.strip()]
+        placeholders = ",".join(["%s"] * len(b_list))
+        q += f" AND Codigo_bodega IN ({placeholders})"
+        params.extend(b_list)
+
     if limit and limit > 0:
         q += " LIMIT %s"
         params.append(limit)
 
     print("Mes filtro:", mes_actual)
+    print("Bodegas filtro:", bodegas if bodegas else "todas")
     cur.execute(q, params)
 
     rows = cur.fetchall()
@@ -88,6 +97,7 @@ def fetch_view_rows():
 
     print("Rows fetched:", len(rows))
     return rows
+
 
 def map_row(row: dict) -> dict:
     # Ajusta aquí si en la vista los nombres cambian (por ejemplo Codigo_bodega vs CodigoBodega)
