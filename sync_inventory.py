@@ -50,7 +50,6 @@ def month_label_es_colombia() -> str:
     if ZoneInfo:
         hoy = datetime.now(ZoneInfo("America/Bogota"))
     else:
-        # fallback simple si zoneinfo no está
         hoy = datetime.utcnow()
     return f"{meses[hoy.month]} {hoy.year}"
 
@@ -131,6 +130,7 @@ def fetch_inventario_rows():
 
 
 def map_inventario(row: dict) -> dict:
+    # Nunca NULL en estas claves (para upsert)
     talla = normalize_text(row.get("Talla")) or ""
     color_raw = normalize_text(row.get("Color")) or ""
 
@@ -153,7 +153,7 @@ def map_inventario(row: dict) -> dict:
 
 
 # ======================
-# Fetch Productos + Precios Lista
+# Fetch Productos + Precios
 # ======================
 def fetch_productos_precios_rows():
     limit = int(os.environ.get("DB_QUERY_LIMIT_PRODUCTOS", "0") or "0")
@@ -261,22 +261,19 @@ def main():
         mapped_inv.append(map_inventario(r))
 
     upsert_supabase(
-    table="precios_lista",
-    on_conflict="referencia,lista_codigo",
-    rows=list(precios_by_key.values())
-)
+        table="inventario",
+        on_conflict="mes,bodega_codigo,referencia,talla,color_raw",
+        rows=mapped_inv
+    )
 
     # 2) Productos + precios lista
     prod_rows = fetch_productos_precios_rows()
 
+    # Maestro deduplicado por referencia
     productos_by_ref = {}
-   precios_by_key = {}
-...
-p = map_precio(r)
-if p["referencia"] and p["lista_codigo"] and p["precio"] is not None:
-    key = (p["referencia"], p["lista_codigo"])
-    # Si hay duplicados, nos quedamos con el último (o el mayor, si prefieres)
-    precios_by_key[key] = p
+
+    # ✅ Precios deduplicados por (referencia, lista_codigo) para evitar error 21000
+    precios_by_key = {}
 
     for r in prod_rows:
         ref = normalize_text(r.get("codigoAlternoProducto"))
@@ -287,7 +284,10 @@ if p["referencia"] and p["lista_codigo"] and p["precio"] is not None:
 
         p = map_precio(r)
         if p["referencia"] and p["lista_codigo"] and p["precio"] is not None:
-            precios.append(p)
+            key = (p["referencia"], p["lista_codigo"])
+            # Si hay duplicados, nos quedamos con el último.
+            # Si prefieres el mayor precio, me dices y lo cambio.
+            precios_by_key[key] = p
 
     upsert_supabase(
         table="productos",
@@ -298,7 +298,7 @@ if p["referencia"] and p["lista_codigo"] and p["precio"] is not None:
     upsert_supabase(
         table="precios_lista",
         on_conflict="referencia,lista_codigo",
-        rows=precios
+        rows=list(precios_by_key.values())
     )
 
     print("Sync OK")
