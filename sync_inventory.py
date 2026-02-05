@@ -104,6 +104,36 @@ def fetch_view_rows():
     print("Rows fetched:", len(rows))
     return rows
 
+def fetch_productos_precios_rows():
+    limit = int(os.environ.get("DB_QUERY_LIMIT_PRODUCTOS", "0") or "0")
+
+    cnx = mysql_connect()
+    cur = cnx.cursor(dictionary=True)
+
+    q = """
+    SELECT
+      codigoAlternoProducto,
+      nombreLargoProducto,
+      codigoBarrasProducto,
+      NombreTemporada,
+      CodigoAlternoListaPrecio,
+      PrecioListaPrecioDetalle
+    FROM viewProductoListaPrecioDisneylandia
+    WHERE TRIM(CodigoAlternoListaPrecio) = '01'
+    """
+    if limit and limit > 0:
+        q += " LIMIT %s"
+        cur.execute(q, (limit,))
+    else:
+        cur.execute(q)
+
+    rows = cur.fetchall()
+    cur.close()
+    cnx.close()
+
+    print("Productos/Precios rows fetched:", len(rows))
+    return rows
+
 
 def map_row(row: dict) -> dict:
     return {
@@ -142,6 +172,23 @@ def upsert_supabase(mapped_rows: list[dict]) -> None:
 
     print("Upsert OK")
 
+def map_producto(row: dict) -> dict:
+    return {
+        "referencia": normalize_text(row.get("codigoAlternoProducto")),
+        "nombre": normalize_text(row.get("nombreLargoProducto")),
+        "codigo_barras": normalize_text(row.get("codigoBarrasProducto")),
+        "temporada": normalize_text(row.get("NombreTemporada")),
+        "updated_at": now_utc_iso(),
+    }
+
+def map_precio(row: dict) -> dict:
+    return {
+        "referencia": normalize_text(row.get("codigoAlternoProducto")),
+        "lista_codigo": (normalize_text(row.get("CodigoAlternoListaPrecio")) or "").strip(),
+        "precio": json_safe(row.get("PrecioListaPrecioDetalle")),
+        "updated_at": now_utc_iso(),
+    }
+
 def main():
     print("Sync start")
     rows = fetch_view_rows()
@@ -156,8 +203,22 @@ def main():
         print("No hay filas para sincronizar.")
         return
 
-    upsert_supabase(mapped)
-    print(f"Sync OK → {len(mapped)} filas")
+   def upsert_supabase(table: str, on_conflict: str, rows: list[dict]) -> None:
+    supa_url = env("SUPABASE_URL").rstrip("/")
+    url = f"{supa_url}/rest/v1/{table}?on_conflict={on_conflict}"
+    headers = supabase_headers()
 
-if __name__ == "__main__":
-    main()
+    total = len(rows)
+    print(f"Upsert {table}: {total} rows (batch {BATCH_SIZE})")
+
+    for i in range(0, total, BATCH_SIZE):
+        batch = rows[i:i + BATCH_SIZE]
+        resp = requests.post(url, headers=headers, json=batch, timeout=60)
+
+        if resp.status_code not in (200, 201, 204):
+            print("Supabase status:", resp.status_code)
+            print("Supabase body (first 500):", (resp.text or "")[:500])
+            print("Table:", table)
+            raise RuntimeError(f"Falló el upsert a Supabase ({table})")
+
+    print(f"Upsert OK ({table})")
