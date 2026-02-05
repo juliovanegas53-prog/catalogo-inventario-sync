@@ -2,9 +2,15 @@ import os
 import requests
 import mysql.connector
 from datetime import datetime, timezone
+from decimal import Decimal
 
 TABLE = "inventario"
 BATCH_SIZE = 500
+
+def json_safe(v):
+    if isinstance(v, Decimal):
+        return float(v)
+    return v
 
 def env(name: str, default: str | None = None) -> str:
     v = os.environ.get(name, default)
@@ -100,7 +106,6 @@ def fetch_view_rows():
 
 
 def map_row(row: dict) -> dict:
-    # Ajusta aquí si en la vista los nombres cambian (por ejemplo Codigo_bodega vs CodigoBodega)
     return {
         "mes": normalize_text(row.get("Mes")),
         "bodega_codigo": normalize_text(row.get("Codigo_bodega")),
@@ -111,10 +116,10 @@ def map_row(row: dict) -> dict:
         "nombre": normalize_text(row.get("Nombre_largo_producto")),
         "talla": normalize_text(row.get("Talla")),
         "color_raw": normalize_text(row.get("Color")),
-        "cantidad_fisica": row.get("Cantidad_fisica"),
-        "costo_promedio_unitario_local": row.get("Costo_promedio_unitario_local"),
-        "costo_promedio_unitario_niif": row.get("Costo_promedio_unitario_niif"),
-        "costo_promedio_unitario_total": row.get("Costo_promedio_unitario_total"),
+        "cantidad_fisica": json_safe(row.get("Cantidad_fisica")),
+        "costo_promedio_unitario_local": json_safe(row.get("Costo_promedio_unitario_local")),
+        "costo_promedio_unitario_niif": json_safe(row.get("Costo_promedio_unitario_niif")),
+        "costo_promedio_unitario_total": json_safe(row.get("Costo_promedio_unitario_total")),
         "updated_at": now_utc_iso(),
     }
 
