@@ -9,10 +9,6 @@ try:
 except Exception:
     ZoneInfo = None
 
-
-# ======================
-# Config
-# ======================
 BATCH_SIZE = 500
 
 
@@ -38,17 +34,14 @@ def normalize_text(v):
 
 
 def json_safe(v):
-    # Supabase REST (PostgREST) necesita JSON serializable
     if isinstance(v, Decimal):
         return float(v)
-    # Si alguna vista devuelve fechas
-    if isinstance(v, (datetime, )):
+    if isinstance(v, datetime):
         return v.isoformat()
     return v
 
 
 def month_label_es_colombia() -> str:
-    # Para evitar líos de fin de mes por UTC, usamos America/Bogota si está disponible
     meses = {
         1: "ENERO", 2: "FEBRERO", 3: "MARZO", 4: "ABRIL",
         5: "MAYO", 6: "JUNIO", 7: "JULIO", 8: "AGOSTO",
@@ -57,9 +50,8 @@ def month_label_es_colombia() -> str:
     if ZoneInfo:
         hoy = datetime.now(ZoneInfo("America/Bogota"))
     else:
-        # Fallback: UTC-5 aproximado
+        # fallback simple si zoneinfo no está
         hoy = datetime.utcnow()
-        hoy = hoy.replace(hour=hoy.hour - 5)
     return f"{meses[hoy.month]} {hoy.year}"
 
 
@@ -74,7 +66,7 @@ def supabase_headers() -> dict:
 
 
 # ======================
-# MySQL connection
+# MySQL
 # ======================
 def mysql_connect():
     host = env("DB_HOST")
@@ -85,20 +77,19 @@ def mysql_connect():
 
     print("DB connect:", host, port, db, user)
 
-    # SSL Mode=None (como el .NET config) -> ssl_disabled=True
     return mysql.connector.connect(
         host=host,
         port=port,
         database=db,
         user=user,
         password=pwd,
-        ssl_disabled=True,
+        ssl_disabled=True,          # SSL Mode=None
         connection_timeout=30,
     )
 
 
 # ======================
-# Fetch: Inventario (mes actual, stock > 0, opcional bodegas)
+# Fetch Inventario
 # ======================
 def fetch_inventario_rows():
     mes_actual = month_label_es_colombia()
@@ -126,11 +117,12 @@ def fetch_inventario_rows():
         q += " LIMIT %s"
         params.append(limit)
 
-    print("Mes filtro:", mes_actual)
+    print("Mes filtro inventario:", mes_actual)
     print("Bodegas filtro:", bodegas if bodegas else "todas")
-    cur.execute(q, params)
 
+    cur.execute(q, params)
     rows = cur.fetchall()
+
     cur.close()
     cnx.close()
 
@@ -139,7 +131,6 @@ def fetch_inventario_rows():
 
 
 def map_inventario(row: dict) -> dict:
-    # IMPORTANT: talla y color_raw en "" (no NULL) para que el UNIQUE+upsert funcione perfecto
     talla = normalize_text(row.get("Talla")) or ""
     color_raw = normalize_text(row.get("Color")) or ""
 
@@ -162,7 +153,7 @@ def map_inventario(row: dict) -> dict:
 
 
 # ======================
-# Fetch: Productos + Precios lista 01
+# Fetch Productos + Precios Lista
 # ======================
 def fetch_productos_precios_rows():
     limit = int(os.environ.get("DB_QUERY_LIMIT_PRODUCTOS", "0") or "0")
@@ -170,17 +161,17 @@ def fetch_productos_precios_rows():
     cnx = mysql_connect()
     cur = cnx.cursor(dictionary=True)
 
- q = """
-SELECT
-  codigoAlternoProducto,
-  nombreLargoProducto,
-  codigoBarrasProducto,
-  nombreTemporada,
-  CodigoAlternoListaPrecio,
-  PrecioListaPrecioDetalle
-FROM viewProductoListaPrecioDisneylandia
-WHERE TRIM(CodigoAlternoListaPrecio) IN ('01','1','001')
-"""
+    q = """
+    SELECT
+      codigoAlternoProducto,
+      nombreLargoProducto,
+      codigoBarrasProducto,
+      nombreTemporada,
+      CodigoAlternoListaPrecio,
+      PrecioListaPrecioDetalle
+    FROM viewProductoListaPrecioDisneylandia
+    WHERE TRIM(CodigoAlternoListaPrecio) IN ('01','1','001')
+    """
 
     if limit and limit > 0:
         q += " LIMIT %s"
@@ -189,14 +180,11 @@ WHERE TRIM(CodigoAlternoListaPrecio) IN ('01','1','001')
         cur.execute(q)
 
     rows = cur.fetchall()
+
     cur.close()
     cnx.close()
 
     print("Productos/Precios rows fetched:", len(rows))
-    print("Sample keys:", list(rows[0].keys()) if rows else "no rows")
-    for i in range(min(3, len(rows))):
-        print("Sample row", i, rows[i])
-        
     return rows
 
 
@@ -210,8 +198,8 @@ def map_producto(row: dict) -> dict:
     }
 
 
-
 def map_precio(row: dict) -> dict:
+    # tolerante por si cambia el case
     precio = row.get("PrecioListaPrecioDetalle")
     if precio is None:
         precio = row.get("precioListaPrecioDetalle")
@@ -227,17 +215,9 @@ def map_precio(row: dict) -> dict:
         "updated_at": now_utc_iso(),
     }
 
-    return {
-        "referencia": normalize_text(row.get("codigoAlternoProducto")),
-        "lista_codigo": (normalize_text(lista) or "").strip(),
-        "precio": json_safe(precio),
-        "updated_at": now_utc_iso(),
-    }
-
-
 
 # ======================
-# Supabase Upsert (genérico)
+# Upsert Supabase
 # ======================
 def upsert_supabase(table: str, on_conflict: str, rows: list[dict]) -> None:
     if not rows:
@@ -272,7 +252,7 @@ def upsert_supabase(table: str, on_conflict: str, rows: list[dict]) -> None:
 def main():
     print("Sync start")
 
-    # 1) Inventario (mes actual, stock>0, bodegas opcional)
+    # 1) Inventario
     inv_rows = fetch_inventario_rows()
     mapped_inv = []
     for r in inv_rows:
@@ -286,13 +266,11 @@ def main():
         rows=mapped_inv
     )
 
-    # 2) Maestro producto + precio lista 01
+    # 2) Productos + precios lista
     prod_rows = fetch_productos_precios_rows()
 
     productos_by_ref = {}
     precios = []
-
-    WHERE TRIM(CodigoAlternoListaPrecio) IN ('01','1','001')
 
     for r in prod_rows:
         ref = normalize_text(r.get("codigoAlternoProducto"))
@@ -301,9 +279,9 @@ def main():
 
         productos_by_ref[ref] = map_producto(r)
 
-        precio = map_precio(r)
-        if precio["referencia"] and precio["lista_codigo"]:
-            precios.append(precio)
+        p = map_precio(r)
+        if p["referencia"] and p["lista_codigo"] and p["precio"] is not None:
+            precios.append(p)
 
     upsert_supabase(
         table="productos",
