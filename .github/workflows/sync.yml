@@ -17,12 +17,13 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - run: python sync_inventory.py
+           - run: python sync_inventory.py
         env:
-         ERP_BASE_URL: ${{ secrets.ERP_BASE_URL }}
-         ERP_VIEW_NAME: ${{ secrets.ERP_VIEW_NAME }}
-         ERP_LOGIN_URL: ${{ secrets.ERP_LOGIN_URL }}
-         ERP_USERNAME: ${{ secrets.ERP_USERNAME }}
-         ERP_PASSWORD: ${{ secrets.ERP_PASSWORD }}
-         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-         SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_QUERY_LIMIT: ${{ secrets.DB_QUERY_LIMIT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
