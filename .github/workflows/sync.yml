@@ -17,7 +17,9 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-           - run: python sync_inventory.py
+      - run: sudo timedatectl set-timezone America/Bogota
+
+      - run: python sync_inventory.py
         env:
           DB_HOST: ${{ secrets.DB_HOST }}
           DB_PORT: ${{ secrets.DB_PORT }}
