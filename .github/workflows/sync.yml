@@ -29,3 +29,4 @@ jobs:
           DB_QUERY_LIMIT: ${{ secrets.DB_QUERY_LIMIT }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BODEGAS_PERMITIDAS: ${{ secrets.BODEGAS_PERMITIDAS }}
