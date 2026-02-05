@@ -198,13 +198,14 @@ def fetch_productos_precios_rows():
 
 
 def map_producto(row: dict) -> dict:
-       return {
+    return {
         "referencia": normalize_text(row.get("codigoAlternoProducto")),
-        "nombre": nombre,
+        "nombre": normalize_text(row.get("nombreLargoProducto")),
         "codigo_barras": normalize_text(row.get("codigoBarrasProducto")),
         "temporada": normalize_text(row.get("NombreTemporada")),
         "updated_at": now_utc_iso(),
     }
+
 
 
 def map_precio(row: dict) -> dict:
