@@ -261,16 +261,22 @@ def main():
         mapped_inv.append(map_inventario(r))
 
     upsert_supabase(
-        table="inventario",
-        on_conflict="mes,bodega_codigo,referencia,talla,color_raw",
-        rows=mapped_inv
-    )
+    table="precios_lista",
+    on_conflict="referencia,lista_codigo",
+    rows=list(precios_by_key.values())
+)
 
     # 2) Productos + precios lista
     prod_rows = fetch_productos_precios_rows()
 
     productos_by_ref = {}
-    precios = []
+   precios_by_key = {}
+...
+p = map_precio(r)
+if p["referencia"] and p["lista_codigo"] and p["precio"] is not None:
+    key = (p["referencia"], p["lista_codigo"])
+    # Si hay duplicados, nos quedamos con el último (o el mayor, si prefieres)
+    precios_by_key[key] = p
 
     for r in prod_rows:
         ref = normalize_text(r.get("codigoAlternoProducto"))
