@@ -174,7 +174,7 @@ def fetch_productos_precios_rows():
     SELECT
       codigoAlternoProducto,
       nombreLargoProducto,
-      nombrerLargoProducto,
+      nombreLargoProducto,
       codigoBarrasProducto,
       NombreTemporada,
       CodigoAlternoListaPrecio,
@@ -198,10 +198,7 @@ def fetch_productos_precios_rows():
 
 
 def map_producto(row: dict) -> dict:
-    # Hay ambigüedad: nombreLargoProducto vs nombrerLargoProducto (typo)
-    nombre = normalize_text(row.get("nombreLargoProducto")) or normalize_text(row.get("nombrerLargoProducto"))
-
-    return {
+       return {
         "referencia": normalize_text(row.get("codigoAlternoProducto")),
         "nombre": nombre,
         "codigo_barras": normalize_text(row.get("codigoBarrasProducto")),
