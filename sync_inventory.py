@@ -51,18 +51,36 @@ def mysql_connect():
     )
 
 def fetch_view_rows():
+    import datetime
+
+    meses = {
+        1: "ENERO", 2: "FEBRERO", 3: "MARZO", 4: "ABRIL",
+        5: "MAYO", 6: "JUNIO", 7: "JULIO", 8: "AGOSTO",
+        9: "SEPTIEMBRE", 10: "OCTUBRE", 11: "NOVIEMBRE", 12: "DICIEMBRE",
+    }
+
+    hoy = datetime.datetime.now()
+    mes_actual = f"{meses[hoy.month]} {hoy.year}"
+
     limit = int(os.environ.get("DB_QUERY_LIMIT", "0") or "0")
-    view_name = "viewInventarioDisneylandia"
 
     cnx = mysql_connect()
     cur = cnx.cursor(dictionary=True)
 
-    q = f"SELECT * FROM {view_name}"
-    if limit and limit > 0:
-        q += f" LIMIT {limit}"
+    q = """
+    SELECT *
+    FROM viewInventarioDisneylandia
+    WHERE UPPER(Mes) = %s
+      AND Cantidad_fisica > 0
+    """
+    params = [mes_actual]
 
-    print("SQL:", q[:120] + ("..." if len(q) > 120 else ""))
-    cur.execute(q)
+    if limit and limit > 0:
+        q += " LIMIT %s"
+        params.append(limit)
+
+    print("Mes filtro:", mes_actual)
+    cur.execute(q, params)
 
     rows = cur.fetchall()
     cur.close()
