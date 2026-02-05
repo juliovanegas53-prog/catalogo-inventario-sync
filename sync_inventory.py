@@ -171,17 +171,16 @@ def fetch_productos_precios_rows():
     cur = cnx.cursor(dictionary=True)
 
     q = """
-    SELECT
-      codigoAlternoProducto,
-      nombreLargoProducto,
-      nombreLargoProducto,
-      codigoBarrasProducto,
-      NombreTemporada,
-      CodigoAlternoListaPrecio,
-      PrecioListaPrecioDetalle
-    FROM viewProductoListaPrecioDisneylandia
-    WHERE TRIM(CodigoAlternoListaPrecio) = '01'
-    """
+SELECT
+  codigoAlternoProducto,
+  nombreLargoProducto,
+  codigoBarrasProducto,
+  nombreTemporada,
+  CodigoAlternoListaPrecio,
+  PrecioListaPrecioDetalle
+FROM viewProductoListaPrecioDisneylandia
+WHERE TRIM(CodigoAlternoListaPrecio) IN ('01','1','001')
+"""
 
     if limit and limit > 0:
         q += " LIMIT %s"
@@ -194,6 +193,10 @@ def fetch_productos_precios_rows():
     cnx.close()
 
     print("Productos/Precios rows fetched:", len(rows))
+    print("Sample keys:", list(rows[0].keys()) if rows else "no rows")
+    for i in range(min(3, len(rows))):
+        print("Sample row", i, rows[i])
+        
     return rows
 
 
@@ -202,19 +205,35 @@ def map_producto(row: dict) -> dict:
         "referencia": normalize_text(row.get("codigoAlternoProducto")),
         "nombre": normalize_text(row.get("nombreLargoProducto")),
         "codigo_barras": normalize_text(row.get("codigoBarrasProducto")),
-        "temporada": normalize_text(row.get("NombreTemporada")),
+        "temporada": normalize_text(row.get("nombreTemporada")),
         "updated_at": now_utc_iso(),
     }
 
 
 
 def map_precio(row: dict) -> dict:
+    precio = row.get("PrecioListaPrecioDetalle")
+    if precio is None:
+        precio = row.get("precioListaPrecioDetalle")
+
+    lista = row.get("CodigoAlternoListaPrecio")
+    if lista is None:
+        lista = row.get("codigoAlternoListaPrecio")
+
     return {
         "referencia": normalize_text(row.get("codigoAlternoProducto")),
-        "lista_codigo": (normalize_text(row.get("CodigoAlternoListaPrecio")) or "").strip(),
-        "precio": json_safe(row.get("PrecioListaPrecioDetalle")),
+        "lista_codigo": (normalize_text(lista) or "").strip(),
+        "precio": json_safe(precio),
         "updated_at": now_utc_iso(),
     }
+
+    return {
+        "referencia": normalize_text(row.get("codigoAlternoProducto")),
+        "lista_codigo": (normalize_text(lista) or "").strip(),
+        "precio": json_safe(precio),
+        "updated_at": now_utc_iso(),
+    }
+
 
 
 # ======================
@@ -272,6 +291,8 @@ def main():
 
     productos_by_ref = {}
     precios = []
+
+    WHERE TRIM(CodigoAlternoListaPrecio) IN ('01','1','001')
 
     for r in prod_rows:
         ref = normalize_text(r.get("codigoAlternoProducto"))
